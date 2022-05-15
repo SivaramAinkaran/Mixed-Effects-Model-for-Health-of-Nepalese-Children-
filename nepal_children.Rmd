@@ -1,0 +1,103 @@
+---
+title: "Mixed Effects Model - Nepalese Children"
+author: "Sivaram Ainkaran"
+date: "18/09/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(faraway)
+library(lme4)
+library(RLRsim)
+```
+
+```{r, echo=FALSE}
+nepali %>%
+filter(!is.na(wt)) %>%
+as_tibble %>%
+mutate(id = factor(id),
+sex = factor(sex, levels = c(1,2), labels = c("male", "female")),
+lit = factor(lit, levels = c(0,1), labels = c("no", "yes"))) %>%
+select(id,sex,wt,mage,lit,died,alive,age) -> nepali1
+nepali1
+?nepali
+
+```
+
+_Question 1_
+```{r, warning=FALSE}
+lmer1 <- lmer(wt ~ sex + mage + lit + died + alive + age + (age|id),  data=nepali1)
+
+
+```
+
+
+_Question 2_
+```{r}
+ranef(lmer1) %>%  as_tibble() %>% 
+  ggplot(aes(sample=condval)) + facet_wrap(~ grpvar) + geom_qq()
+```
+As we can see in the Q-Q plot above, the random effects on the data peak alot at the centre - shown by the almost straight line around 0. This is quite similar to a normal distribution, just with most of the effects peaking at the center, with long tails.
+
+
+_Question 3_
+
+```{r, echo=FALSE}
+summary(lmer1)
+```
+From this summary we can see that, the average spread of the intercept throughout the group of children differs by 1.948967 while the average spread of age across the group differs by 0.001295. The individual "id" represents an individual child and has different values spaced 4 months apart. From this, we can also see that the spread between different individuals is much greater than the spread between a single individual's own results since the intercept variance is much greater than the residual variance. 
+
+
+
+_Question 4_
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+confint(lmer1, method="boot")
+             
+```
+We can use this bootstrapped confidence interval, and the summary from the previous question to determine significance of each term. We can see that the standard deviation for the random intercept does fall within the ".sig01" confidence interval, meaning it is not a significant random effect. The correlation of the random effects of -0.58 does fall within the ".sig02" confidence interval too, meaning it is not significant either. The random slope however, does not have a standard deviation contained within the ".sig03" confidence interval, meaning it is significant.
+
+
+
+_Question 5_
+
+We can use the confidence intervals and summary from the previous 2 questions to interpret the estimates of different fixed effects in the model.
+
+The estimated fixed effects of sex ("sexfemale" here) indicates that female children will, on average be -0.425426kg lighter. The estimated fixed effects of "age" indicates that a child that is 1 month older in age will on average be 0.136661kg heavier. The estimated fixed effects of "mage" indicates that a mother that is 1 year older will have a child that is 0.045641kg heavier, on average. The estimated fixed effects of lit ("lityes" here) indicates that a mother who is literate will have a child that is 0.284003kg heavier on average.
+
+
+_Question 6_
+```{r, warning=FALSE, message=FALSE} 
+#null model - model without random effects
+lmnull <- lm(wt ~ sex + mage + lit + died + alive + age, data=nepali1)
+#original model - with random effects
+lmer2 <- lmer(wt ~ sex + mage + lit + died + alive + age + (1|id), data=nepali1) 
+
+#estimated Likelihood Ratio Test (LRT) statistic
+lrtstat <- as.numeric(2*(logLik(lmer2)-logLik(lmnull)))
+
+#parametric bootstrap of the model with and without random effects (for more accurate LRT statistic)
+y <- simulate(lmnull)
+lmlst <- numeric(1000)
+for(i in 1:1000){
+  y <- unlist(simulate(lmnull))
+  lm_null <- lm(y ~ sex + mage + lit + died + alive + age, data=nepali1)
+  lmer_2 <- lmer(y ~ sex + mage + lit + died + alive + age + (1|id),  data=nepali1, REML=FALSE)
+  lmlst[i] <-  as.numeric(2*logLik(lmer_2)-logLik(lm_null))
+}
+
+p_value <- mean(lmlst>lrtstat)
+std_error <- sqrt((p_value*(1-p_value))/1000)
+data.frame(p_value, std_error)
+
+```
+Here we use the parametric bootstrapping approach to determine whether the fixed effects in this model are jointly significant. We can see that the p-value produced is 0 so we can reject the null hypothesis that there are no differences between all the fixed effects. This means the fixed effects are not jointly significant. This p-value has a standard error of 0 as well, so we can be quite certain that this is an accurate value.
+
+
+
+
+
+
